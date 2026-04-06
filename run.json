@@ -1,0 +1,31 @@
+{
+    "title": "Repeater Render Server",
+    "requirements": [
+        "playwright==1.58.0",
+        "pydantic==2.12.5",
+        "orjson==3.11.8",
+        "pyyaml==6.0.3",
+        "fastapi==0.135.3",
+        "uvicorn==0.43.0",
+        "loguru==0.7.3",
+        "bleach==6.3.0",
+        "yarl==1.23.0",
+        "python-box==7.4.1"
+    ],
+    "requirements_file": "requirements.txt",
+    "use_venv": true,
+    "venv_prompt": "venv",
+    "script_name": null,
+    "arguments": null,
+    "python_arguments": [],
+    "restart": true,
+    "reselect": false,
+    "run_cmd_need_to_ask": true,
+    "ask_default_values": {},
+    "divider_line_char": "=",
+    "text_encoding": "utf-8",
+    "print_return_code": true,
+    "print_runtime": true,
+    "automatic_exit": false,
+    "allow_print": true
+}
