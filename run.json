@@ -1,6 +1,7 @@
 {
     "title": "Repeater Render Server",
     "requirements": [
+        "aiofiles==25.1.0",
         "playwright==1.58.0",
         "pydantic==2.12.5",
         "orjson==3.11.8",
@@ -19,7 +20,7 @@
     "python_arguments": [],
     "restart": true,
     "reselect": false,
-    "run_cmd_need_to_ask": true,
+    "run_cmd_need_to_ask": false,
     "ask_default_values": {},
     "divider_line_char": "=",
     "text_encoding": "utf-8",
