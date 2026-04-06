@@ -3,4 +3,4 @@ from ._version import (
     version,
     module_version
 )
-from ._tempfiles_api import *
+from ._get_files_api import *

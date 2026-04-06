@@ -6,7 +6,7 @@ from pathlib import Path
 
 from ....global_config_manager import ConfigManager
 
-@Resource.app.get("/file/render/{file_uuid}.png", name = "render_file")
+@Resource.app.get("/files/render/{file_uuid}.png", name = "render_file")
 async def get_render_file(file_uuid: str):
     """
     Endpoint for rendering file
