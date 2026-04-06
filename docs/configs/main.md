@@ -165,33 +165,6 @@
         // 是否无头模式
         "headless": true,
 
-        // 扩展
-        "extensions": [
-            "extra",
-            "sane_lists",
-            "admonition",
-            "codehilite",
-            "nl2br"
-        ],
-
-        // 允许的HTML标签
-        "allowed_tags": [
-            "p", "br", "strong", "em", "u", "del", "ins",
-            "h1", "h2", "h3", "h4", "h5", "h6",
-            "ul", "ol", "li",
-            "a", "img",
-            "code", "pre", "blockquote",
-            "table", "thead", "tbody", "tr", "th", "td"
-        ],
-
-        // 允许的HTML属性
-        "allowed_attrs": {
-            "a": ["href", "title", "rel"],
-            "img": ["src", "alt", "title"],
-            "code": ["class"],
-            "pre": ["class"]
-        },
-
         // 允许包含的通信协议
         "allowed_protocols": [
             "http",
