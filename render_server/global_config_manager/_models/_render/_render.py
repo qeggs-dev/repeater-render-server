@@ -18,25 +18,4 @@ class RenderConfig(BaseModel):
     max_pages_per_browser: int = 10
     max_browsers: int = 10
     headless: bool = True
-    extensions: list[str] = [
-        "extra",
-        "sane_lists",
-        "admonition",
-        "codehilite",
-        "nl2br"
-    ]
-    allowed_tags: list[str] = [
-        "p", "br", "strong", "em", "u", "del", "ins",
-        "h1", "h2", "h3", "h4", "h5", "h6",
-        "ul", "ol", "li",
-        "a", "img",
-        "code", "pre", "blockquote",
-        "table", "thead", "tbody", "tr", "th", "td",
-    ]
-    allowed_attrs: dict[str, list[str]] = {
-        "a": ["href", "title", "rel"],
-        "img": ["src", "alt", "title"],
-        "code": ["class"],
-        "pre": ["class"],
-    }
     allowed_protocols: list[str] = ["http", "https", "mailto"]
