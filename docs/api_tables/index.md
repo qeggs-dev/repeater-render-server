@@ -10,7 +10,7 @@
 获取指定图片
 [详情](./get_image_api.md)
 
-## Test Connection API
+## Alived API
 
-测试连接
-[详情](./test_connection.md)
+查看服务是否存活
+[详情](./alived.md)
