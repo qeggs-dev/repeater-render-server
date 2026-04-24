@@ -2,7 +2,7 @@
 
 将 Markdown 文本转换为图片进行输出
 
-- **`/render/{user_id:str}`**
+- **`/render`**
   - **Requset**
     - **method:** `POST`
     - **type:** `JSON`
