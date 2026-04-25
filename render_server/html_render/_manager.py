@@ -19,7 +19,6 @@ from playwright.async_api import (
     BrowserContext,
     Page,
     Playwright,
-    ProxySettings,
     Route,
     Request
 )
@@ -29,7 +28,6 @@ from ..lifespan import (
     StartHandler,
     ExitHandler
 )
-from ._new_browser_context import NewBrowserContext
 
 
 class BrowserPoolManager:
