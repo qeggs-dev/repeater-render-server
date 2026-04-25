@@ -2,9 +2,6 @@ from __future__ import annotations
 import asyncio
 import time
 import re
-import tempfile
-import shutil
-from pathlib import Path
 from render_server.regex_checker import RegexChecker
 from typing import Any
 from ._enums import (
@@ -18,7 +15,6 @@ from ._render_config import RenderConfig
 from ._render_result import RenderResult
 from playwright.async_api import (
     async_playwright,
-    Browser,
     BrowserContext,
     Page,
     Playwright,
@@ -34,10 +30,9 @@ from ..lifespan import (
 )
 from ._new_browser_context import NewBrowserContext
 
-
 class BrowserPoolManager:
     """
-    浏览器管理器 - 使用持久化上下文
+    浏览器管理器
     """
     
     _instances: list[BrowserPoolManager] = []
@@ -50,28 +45,22 @@ class BrowserPoolManager:
         default_browser: BrowserType = BrowserType.AUTO,
         headless: bool = True,
         route_blacklist: RegexChecker | None = None,
-        context_args: BrowserContextArgs | None = None,
-        default_config: RenderConfig | None = None,
-        user_data_dir: str | Path | None = None
+        browser_context_args: BrowserContextArgs | None = None,
+        default_config: RenderConfig | None = None
     ):
         self.max_pages_per_browser: int = max_pages_per_browser
         self.max_browsers: int = max_browsers
         self.default_browser: BrowserType = default_browser
         self.headless: bool = headless
-        self.context_args: BrowserContextArgs = context_args or BrowserContextArgs()
+        self.browser_args: BrowserContextArgs = browser_context_args or {}
         self.default_config: RenderConfig = default_config or RenderConfig()
         
-        # 用户数据目录（用于持久化上下文）
-        self.user_data_dir: Path | None = Path(user_data_dir) if user_data_dir else None
-        
-        # 浏览器池状态 - 存储 BrowserContext 而不是 Browser
+        # 浏览器池状态
         self._playwright: Playwright | None = None
-        self._context_pool: dict[BrowserType, list[BrowserContext]] = {}
-        self._available_contexts: dict[BrowserType, list[BrowserContext]] = {}
+        self._browser_pool: dict[BrowserType, list[BrowserContext]] = {}
+        self._available_browsers: dict[BrowserType, list[BrowserContext]] = {}
         self._page_pool: dict[BrowserContext, list[Page]] = {}
         self._available_pages: dict[BrowserContext, list[Page]] = {}
-        self._context_to_browser_type: dict[BrowserContext, BrowserType] = {}
-        self._temp_dirs: list[Path] = []  # 跟踪临时目录以便清理
         self._lock = asyncio.Lock()
         
         # 性能统计
@@ -128,10 +117,10 @@ class BrowserPoolManager:
             logger.debug("Playwright instance created")
             
             for browser_type in BrowserType:
-                self._context_pool[browser_type] = []
-                self._available_contexts[browser_type] = []
+                self._browser_pool[browser_type] = []
+                self._available_browsers[browser_type] = []
             
-            logger.info("Browser context pool initialized")
+            logger.info("Browser pool initialized")
     
     async def _block_intranet_resources(self, route: Route, request: Request):
         url = request.url
@@ -152,7 +141,6 @@ class BrowserPoolManager:
         output_path: str,
         browser_type: BrowserType | None = None,
         image_format: ImageFormat = ImageFormat.AUTO,
-        new_context: NewBrowserContext | None = None,
         config: RenderConfig | None = None,
         **kwargs
     ) -> RenderResult:
@@ -191,7 +179,7 @@ class BrowserPoolManager:
         
         # 执行渲染
         try:
-            context, page, browser_name = await self._acquire_page_for_render(browser_type, new_context)
+            browser, page, browser_name = await self._acquire_page_for_render(browser_type)
 
             # 创建路由拦截
             await page.route("**/*", self._block_intranet_resources)
@@ -239,16 +227,12 @@ class BrowserPoolManager:
             )
         
         finally:
-            # 确保页面和上下文被释放
-            if "context" in locals() and "page" in locals():
-                await self._release_page(context, page)
-    
-    async def _acquire_page_for_render(
-        self, 
-        browser_type: BrowserType, 
-        new_context: NewBrowserContext | None = None
-    ) -> tuple[BrowserContext, Page, str]:
-        """为渲染获取页面和上下文"""
+            # 确保页面和浏览器被释放
+            if "browser" in locals() and "page" in locals():
+                await self._release_page(browser, page)
+  
+    async def _acquire_page_for_render(self, browser_type: BrowserType) -> tuple[BrowserContext, Page, str]:
+        """为渲染获取页面"""
         if browser_type == BrowserType.AUTO:
             # 尝试所有浏览器
             browser_types = [
@@ -261,8 +245,8 @@ class BrowserPoolManager:
             
             for bt in browser_types:
                 try:
-                    context, page = await self._try_acquire_page(bt, new_context)
-                    return context, page, bt.value
+                    browser, page = await self._try_acquire_page(bt)
+                    return browser, page, bt.value
                 except Exception as e:
                     logger.debug(f"Browser {bt} failed: {e}")
                     continue
@@ -270,123 +254,77 @@ class BrowserPoolManager:
             raise RuntimeError("No browser available")
         else:
             # 使用指定浏览器
-            context, page = await self._try_acquire_page(browser_type, new_context)
-            return context, page, browser_type.value
+            browser, page = await self._try_acquire_page(browser_type)
+            return browser, page, browser_type.value
     
-    async def _try_acquire_page(
-        self, 
-        browser_type: BrowserType, 
-        new_context: NewBrowserContext | None = None
-    ) -> tuple[BrowserContext, Page]:
-        """尝试获取页面和上下文"""
-        context = await self._acquire_context(browser_type, new_context)
+    async def _try_acquire_page(self, browser_type: BrowserType) -> tuple[BrowserContext, Page]:
+        """尝试获取页面"""
+        browser_context = await self._acquire_browser(browser_type)
         
         async with self._lock:
             # 检查可用页面
-            if self._available_pages.get(context):
-                page = self._available_pages[context].pop()
-                return context, page
+            if self._available_pages.get(browser_context):
+                page = self._available_pages[browser_context].pop()
+                return browser_context, page
             
             # 创建新页面
-            if len(self._page_pool.get(context, [])) < self.max_pages_per_browser:
-                page = await context.new_page()
-                self._page_pool.setdefault(context, []).append(page)
-                return context, page
+            if len(self._page_pool.get(browser_context, [])) < self.max_pages_per_browser:
+                page = await browser_context.new_page()
+                self._page_pool.setdefault(browser_context, []).append(page)
+                return browser_context, page
             
-            raise RuntimeError("Context page limit reached")
+            raise RuntimeError("Browser page limit reached")
     
-    async def _acquire_context(
-        self, 
-        browser_type: BrowserType, 
-        new_context: NewBrowserContext | None = None
-    ) -> BrowserContext:
-        """获取浏览器上下文（使用 launch_persistent_context）"""
+    async def _acquire_browser(self, browser_type: BrowserType) -> BrowserContext:
+        """获取浏览器"""
         if self._playwright is None:
             await self._initialize()
         
         async with self._lock:
-            # 如果有可用的上下文且不需要新建特殊上下文，直接返回
-            if new_context is None and self._available_contexts.get(browser_type):
-                return self._available_contexts[browser_type].pop()
+            # 检查可用浏览器
+            if self._available_browsers.get(browser_type):
+                return self._available_browsers[browser_type].pop()
             
-            # 检查是否可创建新上下文
-            if len(self._context_pool.get(browser_type, [])) < self.max_browsers:
-                context = await self._create_context(browser_type, new_context)
-                self._context_pool.setdefault(browser_type, []).append(context)
-                self._context_to_browser_type[context] = browser_type
-                return context
+            # 检查是否可创建新浏览器
+            if len(self._browser_pool.get(browser_type, [])) < self.max_browsers:
+                browser_context = await self._get_browser_context(browser_type)
+                self._browser_pool.setdefault(browser_type, []).append(browser_context)
+                return browser_context
             
-            raise RuntimeError(f"No available {browser_type} contexts")
+            raise RuntimeError(f"No available {browser_type} browsers")
     
-    def _get_user_data_dir(self, browser_type: BrowserType) -> Path:
-        """获取用户数据目录"""
-        if self.user_data_dir:
-            # 为不同浏览器类型创建子目录
-            return self.user_data_dir / browser_type.value
-        else:
-            # 创建临时目录
-            temp_dir = Path(tempfile.mkdtemp(prefix=f"playwright_{browser_type.value}_"))
-            self._temp_dirs.append(temp_dir)
-            return temp_dir
-    
-    async def _create_context(
-        self, 
-        browser_type: BrowserType, 
-        new_context: NewBrowserContext | None = None
-    ) -> BrowserContext:
-        """创建浏览器上下文（使用 launch_persistent_context）"""
-        # 获取浏览器启动器
+    async def _get_browser_context(self, browser_type: BrowserType) -> BrowserContext:
+        """创建浏览器"""
         match browser_type:
             case BrowserType.CHROME:
                 browser_creator = self._playwright.chromium
-                channel = "chrome"
+                launch_args = {"channel": "chrome", **self.browser_args.model_dump(exclude_none=True)}
             case BrowserType.MSEDGE:
                 browser_creator = self._playwright.chromium
-                channel = "msedge"
+                launch_args = {"channel": "msedge", **self.browser_args.model_dump(exclude_none=True)}
             case BrowserType.CHROMIUM:
                 browser_creator = self._playwright.chromium
-                channel = None
+                launch_args = self.browser_args.model_dump(exclude_none=True)
             case BrowserType.FIREFOX:
                 browser_creator = self._playwright.firefox
-                channel = None
+                launch_args = self.browser_args.model_dump(exclude_none=True)
             case BrowserType.WEBKIT:
                 browser_creator = self._playwright.webkit
-                channel = None
+                launch_args = self.browser_args.model_dump(exclude_none=True)
             case _:
                 raise ValueError(f"Unsupported browser type: {browser_type}")
         
-        # 获取用户数据目录
-        user_data_dir = self._get_user_data_dir(browser_type)
-        
-        # 构建 launch_persistent_context 参数
-        launch_args = self.context_args.model_dump(exclude_none=True)
-        
-        # 设置 channel（如果指定了）
-        if channel:
-            launch_args["channel"] = channel
-        
-        # 覆盖 new_context 参数（如果提供了）
-        if new_context:
-            new_context_dict = new_context.model_dump(exclude_none=True)
-            launch_args.update(new_context_dict)
-        
-        # 设置 headless
         launch_args["headless"] = self.headless
-        
-        # 启动持久化上下文
-        context = await browser_creator.launch_persistent_context(
-            user_data_dir,
-            **launch_args
-        )
+        browser_context = await browser_creator.launch_persistent_context(**launch_args)
         
         # 初始化池
-        self._page_pool[context] = []
-        self._available_pages[context] = []
+        self._page_pool[browser_context] = []
+        self._available_pages[browser_context] = []
         
-        logger.debug(f"Created new persistent context for {browser_type} at {user_data_dir}")
-        return context
+        logger.debug(f"Created new {browser_type} browser")
+        return browser_context
     
-    async def _release_page(self, context: BrowserContext, page: Page):
+    async def _release_page(self, browser: BrowserContext, page: Page):
         """释放页面"""
         async with self._lock:
             try:
@@ -395,17 +333,19 @@ class BrowserPoolManager:
                 logger.warning(f"Error closing page: {e}")
             
             # 清理池
-            if context in self._page_pool and page in self._page_pool[context]:
-                self._page_pool[context].remove(page)
+            if browser in self._page_pool and page in self._page_pool[browser]:
+                self._page_pool[browser].remove(page)
             
-            if context in self._available_pages and page in self._available_pages[context]:
-                self._available_pages[context].remove(page)
+            if browser in self._available_pages and page in self._available_pages[browser]:
+                self._available_pages[browser].remove(page)
             
-            # 如果上下文没有页面了，释放上下文回池中
-            if context in self._page_pool and not self._page_pool[context]:
-                browser_type = self._context_to_browser_type.get(context)
-                if browser_type and context not in self._available_contexts.get(browser_type, []):
-                    self._available_contexts.setdefault(browser_type, []).append(context)
+            # 如果浏览器没有页面了，释放浏览器
+            if browser in self._page_pool and not self._page_pool[browser]:
+                # 找到浏览器类型
+                for btype, browsers in self._browser_pool.items():
+                    if browser in browsers and browser not in self._available_browsers[btype]:
+                        self._available_browsers[btype].append(browser)
+                        break
     
     async def _get_page_dimensions(self, page: Page) -> dict[str, int]:
         """获取页面实际渲染尺寸"""
@@ -432,20 +372,20 @@ class BrowserPoolManager:
     async def get_stats(self) -> BrowserStats:
         """获取统计信息"""
         async with self._lock:
-            total_contexts = sum(len(contexts) for contexts in self._context_pool.values())
-            available_contexts = sum(len(contexts) for contexts in self._available_contexts.values())
+            total_browsers = sum(len(browsers) for browsers in self._browser_pool.values())
+            available_browsers = sum(len(browsers) for browsers in self._available_browsers.values())
             total_pages = sum(len(pages) for pages in self._page_pool.values())
             available_pages = sum(len(pages) for pages in self._available_pages.values())
             
             browser_type_counts = {
-                btype.value: len(contexts) 
-                for btype, contexts in self._context_pool.items()
-                if contexts
+                btype.value: len(browsers) 
+                for btype, browsers in self._browser_pool.items()
+                if browsers
             }
             
             return BrowserStats(
-                total_browsers=total_contexts,
-                available_browsers=available_contexts,
+                total_browsers=total_browsers,
+                available_browsers=available_browsers,
                 total_pages=total_pages,
                 available_pages=available_pages,
                 browser_type_counts=browser_type_counts
@@ -468,36 +408,26 @@ class BrowserPoolManager:
             logger.info("Closing BrowserPoolManager...")
             
             # 关闭所有页面
-            for context, pages in list(self._page_pool.items()):
+            for browser, pages in list(self._page_pool.items()):
                 for page in pages[:]:
                     try:
                         await page.close()
                     except Exception as e:
                         logger.warning(f"Error closing page: {e}")
             
-            # 关闭所有上下文
-            for browser_type, contexts in list(self._context_pool.items()):
-                for context in contexts[:]:
+            # 关闭所有浏览器
+            for browser_type, browsers in list(self._browser_pool.items()):
+                for browser in browsers[:]:
                     try:
-                        await context.close()
+                        await browser.close()
                     except Exception as e:
-                        logger.warning(f"Error closing context: {e}")
+                        logger.warning(f"Error closing browser: {e}")
             
             # 清理池
-            self._context_pool.clear()
-            self._available_contexts.clear()
+            self._browser_pool.clear()
+            self._available_browsers.clear()
             self._page_pool.clear()
             self._available_pages.clear()
-            self._context_to_browser_type.clear()
-            
-            # 清理临时目录
-            for temp_dir in self._temp_dirs:
-                try:
-                    shutil.rmtree(temp_dir, ignore_errors=True)
-                    logger.debug(f"Removed temp directory: {temp_dir}")
-                except Exception as e:
-                    logger.warning(f"Failed to remove temp directory {temp_dir}: {e}")
-            self._temp_dirs.clear()
             
             # 停止Playwright
             if self._playwright:
