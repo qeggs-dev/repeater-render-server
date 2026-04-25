@@ -74,7 +74,8 @@ class Resource:
             headless = render_config.headless,
             route_blacklist = route_blacklist,
             browser_args = BrowserArgs(
-                executable_path = render_config.browser_executable_path
+                executable_path = render_config.browser_executable_path,
+                user_data_dir = render_config.browser_user_data_dir
             )
         )
 
