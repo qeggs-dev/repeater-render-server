@@ -15,6 +15,7 @@ class RenderConfig(BaseModel):
     base_url: str | None = None
     browser_type: BrowserType = BrowserType.AUTO
     browser_executable_path: str | None = None
+    browser_user_data_dir: str | None = "./workspace/user_data_dir"
     max_pages_per_browser: int = 10
     max_browsers: int = 10
     headless: bool = True
