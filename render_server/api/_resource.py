@@ -13,7 +13,7 @@ from fastapi import FastAPI
 from ..global_config_manager import ConfigManager
 from ..html_render import (
     BrowserPoolManager,
-    BrowserArgs,
+    BrowserContextArgs,
 )
 from ..logger_init import logger_init
 from ..regex_checker import RegexChecker
@@ -73,8 +73,9 @@ class Resource:
             default_browser = render_config.browser_type,
             headless = render_config.headless,
             route_blacklist = route_blacklist,
-            browser_args = BrowserArgs(
+            browser_context_args = BrowserContextArgs(
                 executable_path = render_config.browser_executable_path,
+                base_url = render_config.base_url,
                 user_data_dir = render_config.browser_user_data_dir
             )
         )

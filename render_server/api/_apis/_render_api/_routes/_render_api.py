@@ -86,9 +86,6 @@ async def render(
             width = width,
             height = height,
             quality = quality
-        ),
-        new_context = NewBrowserContext(
-            base_url = base_url
         )
     )
 
