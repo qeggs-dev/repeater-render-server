@@ -1,24 +1,40 @@
-from pydantic import BaseModel
 from pathlib import Path
-from typing import Sequence, Pattern
+from typing import Any, Sequence, Pattern
+from pydantic import BaseModel, ConfigDict
 from ._proxy_settings import ProxySettings
-from enum import StrEnum
 from ._assist_models import (
     ViewportSize,
     Geolocation,
-    ColorScheme,
     HttpCredentials,
+    ColorScheme,
     ReducedMotion,
     ForcedColors,
     Contrast,
-    StorageState,
     ServiceWorkers,
     RecordHarMode,
     ReclodeHarContent,
-    ClientCertificate,
+    ClientCertificate
 )
 
-class NewBrowserContext(BaseModel):
+class BrowserContextArgs(BaseModel):
+    model_config = ConfigDict(
+        validate_assignment=True
+    )
+
+    user_data_dir: str | Path | None = None
+    channel: str | None = None
+    executable_path: Path | str | None = None
+    args: Sequence[str] | None = None
+    ignore_default_args: bool | Sequence[str] = None
+    handle_sigint: bool | None = None
+    handle_sigterm: bool | None = None
+    handle_sighup: bool | None = None
+    timeout: float | None = None
+    env: dict[str, str | float | bool] | None = None
+    headless: bool | None = None
+    proxy: ProxySettings | None = None
+    downloads_path: Path | str | None = None
+    slow_mo: float | None = None
     viewport: ViewportSize | None = None
     screen: ViewportSize | None = None
     no_viewport: bool | None = None
@@ -41,13 +57,13 @@ class NewBrowserContext(BaseModel):
     forced_colors: ForcedColors | None = None
     contrast: Contrast | None = None
     accept_downloads: bool | None = None
-    default_browser_type: str | None = None
-    proxy: ProxySettings | None = None
+    traces_dir: Path | str | None = None
+    chromium_sandbox: bool | None = None
+    firefox_user_prefs: dict[str, str | float | bool] | None = None
     record_har_path: Path | str | None = None
     record_har_omit_content: bool | None = None
     record_video_dir: Path | str | None = None
     record_video_size: ViewportSize | None = None
-    storage_state: StorageState | str | Path | None = None
     base_url: str | None = None
     strict_selectors: bool | None = None
     service_workers: ServiceWorkers | None = None
