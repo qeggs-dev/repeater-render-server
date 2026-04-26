@@ -30,13 +30,13 @@ from ..lifespan import (
 )
 
 
-class BrowserPoolManager:
+class PersistentBrowserPoolManager:
     """
     单浏览器多页面管理器
     每个浏览器类型只有一个实例，但可以有多个页面
     """
     
-    _instances: list[BrowserPoolManager] = []
+    _instances: list[PersistentBrowserPoolManager] = []
     _is_initialized = False
     
     def __init__(
@@ -76,7 +76,7 @@ class BrowserPoolManager:
             self._route_blacklist = route_blacklist
         
         # 注册实例
-        BrowserPoolManager._instances.append(self)
+        PersistentBrowserPoolManager._instances.append(self)
         self._register_lifespan_handlers()
         
         logger.info(f"BrowserPoolManager (single browser mode) initialized with default browser: {default_browser}")
@@ -433,8 +433,8 @@ class BrowserPoolManager:
                 await self._playwright.stop()
                 self._playwright = None
             
-            if self in BrowserPoolManager._instances:
-                BrowserPoolManager._instances.remove(self)
+            if self in PersistentBrowserPoolManager._instances:
+                PersistentBrowserPoolManager._instances.remove(self)
             
             logger.info("BrowserPoolManager closed")
     
@@ -457,7 +457,7 @@ class BrowserPoolManager:
                 logger.error(f"Failed to warm up browser {bt}: {e}")
                 return False
     
-    async def __aenter__(self) -> BrowserPoolManager:
+    async def __aenter__(self) -> PersistentBrowserPoolManager:
         await self._initialize()
         return self
     
