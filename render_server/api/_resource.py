@@ -69,7 +69,6 @@ class Resource:
                 route_blacklist.load(file_content)
         cls.browser_pool_manager = BrowserPoolManager(
             max_pages_per_browser = render_config.max_pages_per_browser,
-            max_browsers = render_config.max_browsers,
             default_browser = render_config.browser_type,
             headless = render_config.headless,
             route_blacklist = route_blacklist,
