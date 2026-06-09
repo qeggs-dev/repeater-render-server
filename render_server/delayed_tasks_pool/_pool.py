@@ -9,7 +9,7 @@ class DelayedTasksPool:
     def __init__(self):
         self.tasks: set[asyncio.Task] = set()
     
-    async def _task_warper(self, sleep_time: int | float, task: Coroutine[None, None, T], id: str | None = None) -> T:
+    async def _task_wrapper(self, sleep_time: int | float, task: Coroutine[None, None, T], id: str | None = None) -> T:
         if id is None:
             id = task.__qualname__
         logger.trace(
@@ -42,7 +42,7 @@ class DelayedTasksPool:
         """Add task to the pool"""
         self.tasks.add(
             asyncio.create_task(
-                self._task_warper(
+                self._task_wrapper(
                     sleep_time = sleep_time,
                     task = task,
                     id = id
